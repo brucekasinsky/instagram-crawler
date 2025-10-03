@@ -1,0 +1,17 @@
+beautifulsoup4
+certifi
+chardet
+et-xmlfile
+future
+numpy
+openpyxl
+pandas
+python-dateutil 
+pytz
+requests
+selenium
+soupsieve
+urllib3
+gunicorn
+flask
+webdriver-manager

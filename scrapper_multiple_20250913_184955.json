@@ -1,0 +1,12 @@
+{
+  "instagram": {
+    "success": 0,
+    "message": "Erro: JSON Query to graphql/query: 401 Unauthorized - \"fail\" status, message \"Please wait a few minutes before you try again.\" when accessing https://www.instagram.com/graphql/query?variables=%7B%22data%22%3A%7B%22count%22%3A12%2C%22include_relationship_info%22%3Atrue%2C%22latest_besties_reel_media%22%3Atrue%2C%22latest_reel_media%22%3Atrue%7D%2C%22username%22%3A%22instagram%22%2C%22__relay_internal__pv__PolarisFeedShareMenurelayprovider%22%3Afalse%7D&doc_id=7898261790222653&server_timestamps=true",
+    "data": []
+  },
+  "reels": {
+    "success": 0,
+    "message": "Erro: JSON Query to web/search/topsearch/: 401 Unauthorized - \"fail\" status, message \"Server Error\" when accessing https://www.instagram.com/web/search/topsearch/?context=blended&query=reels&include_reel=False&__a=1",
+    "data": []
+  }
+}

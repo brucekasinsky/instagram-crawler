@@ -1,0 +1,12 @@
+{
+  "instagram": {
+    "success": 0,
+    "message": "Falha no login",
+    "data": []
+  },
+  "reels": {
+    "success": 0,
+    "message": "Falha no login",
+    "data": []
+  }
+}

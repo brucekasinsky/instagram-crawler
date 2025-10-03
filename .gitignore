@@ -11,16 +11,30 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+.env/
 
-# node
+# Python
+*.egg-info/
+.tox
+secret.py
+
+# Node
 node_modules/
 
-
-*.egg-info/
-
-
-.tox
-
-secret.py
+# Instagram crawler specific
 inscrawler/bin/*
 !inscrawler/bin/.keep
+
+# Screenshots
+screenshots/
+*.png
+*.jpg
+*.jpeg
+
+# Chrome driver
+chromedriver*

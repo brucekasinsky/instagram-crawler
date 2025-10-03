@@ -1,0 +1,2252 @@
+# import os
+
+# # Limpar cache do Chrome
+# os.system("rm -rf /tmp/.com.google.Chrome")
+
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+import selenium
+import re
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+import requests
+import base64
+from bs4 import BeautifulSoup
+import instaloader
+import os
+import time
+from datetime import datetime
+
+from webdriver_manager.chrome import ChromeDriverManager  # Importando o WebDriver Manager
+from selenium.common.exceptions import TimeoutException
+
+
+class ScraperController:
+    client_id = 'f28b82bd2b3d4538973d1b7250977edf'
+    client_secret = '55d5b78ad98b40a08add314e888b8f21'
+    
+    # Configuração do proxy
+    PROXY_CONFIG = {
+        'https': 'https://user-juicyspace69-country-br-city-sao_jose_do_rio_preto-sessionduration-60:aCQs0w0Qjbj9l9Umex@gate.decodo.com:10001',
+        'http': 'http://user-juicyspace69-country-br-city-sao_jose_do_rio_preto-sessionduration-60:aCQs0w0Qjbj9l9Umex@gate.decodo.com:10001'
+    }
+    
+    def __init__(self):
+        # Credenciais do Instagram para login
+        self.instagram_credentials = {
+            'username': os.environ.get('INSTAGRAM_USERNAME', 'aitechnocruiser'),
+            'password': os.environ.get('INSTAGRAM_PASSWORD', 'bk110903bk110903')
+        }
+        
+        # Controle de sessão - login único
+        self._is_logged_in = False
+        self._login_attempted = False
+        self.browser = None
+
+    def manual_login_instagram(self, username=None, password=None):
+        """
+        Faz login manual no Instagram através da interface web
+        Permite ao usuário inserir credenciais manualmente
+        """
+        try:
+            print("🌐 Iniciando login manual no Instagram...")
+            
+            # Usar credenciais fornecidas ou padrão
+            if username and password:
+                self.instagram_credentials['username'] = username
+                self.instagram_credentials['password'] = password
+            
+            # Criar sessão do navegador se não existir
+            if not hasattr(self, 'browser') or self.browser is None:
+                print("🚀 Iniciando navegador...")
+                self.create_session(mobile=False)
+            
+            # Navegar para página de login
+            print("📱 Navegando para página de login do Instagram...")
+            self.browser.get('https://www.instagram.com/accounts/login/')
+            time.sleep(3)
+            
+            print("\n" + "="*60)
+            print("🔐 LOGIN MANUAL NO INSTAGRAM")
+            print("="*60)
+            print("📝 O navegador está aberto na página de login.")
+            print("👆 Por favor, faça login manualmente:")
+            print("   1. Digite seu username")
+            print("   2. Digite sua senha")
+            print("   3. Clique em 'Entrar'")
+            print("   4. Complete qualquer verificação (2FA, etc.)")
+            print("   5. Aguarde até estar logado no Instagram")
+            print("\n⏳ Aguardando login manual...")
+            print("💡 Pressione ENTER quando estiver logado com sucesso...")
+            
+            # Aguardar input do usuário
+            input()
+            
+            # Verificar se login foi bem-sucedido
+            current_url = self.browser.current_url
+            if "instagram.com" in current_url and "login" not in current_url:
+                print("✅ Login realizado com sucesso!")
+                self._is_logged_in = True
+                return True
+            else:
+                print("❌ Login não detectado. Verifique se está logado corretamente.")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Erro no login manual: {str(e)}")
+            return False
+
+    def ensure_logged_in(self):
+        """
+        Garante que está logado (login único)
+        """
+        if not self._is_logged_in:
+            return self.manual_login_instagram()
+        return True
+
+    def get_profile_reels_web(self, creator_slug, max_reels=20):
+        """
+        Extrai reels de um perfil usando automação web (Selenium)
+        
+        Args:
+            creator_slug (str): Nome de usuário do Instagram
+            max_reels (int): Número máximo de reels para extrair
+        
+        Returns:
+            list: Lista de dicionários com dados dos reels
+        """
+        try:
+            print(f"🎬 Extraindo reels de @{creator_slug} usando automação web...")
+            
+            # Garantir que está logado
+            if not self.ensure_logged_in():
+                print("❌ Falha no login")
+                return []
+            
+            # Navegar para o perfil
+            print(f"📱 Navegando para o perfil @{creator_slug}...")
+            profile_url = f"https://www.instagram.com/{creator_slug}/"
+            self.browser.get(profile_url)
+            time.sleep(5)
+            
+            # Verificar se o perfil existe
+            if "Page Not Found" in self.browser.page_source or "Sorry, this page isn't available" in self.browser.page_source:
+                print(f"❌ Perfil @{creator_slug} não encontrado")
+                return []
+            
+            # Verificar se o perfil é privado
+            if "This Account is Private" in self.browser.page_source:
+                print(f"❌ Perfil @{creator_slug} é privado")
+                return []
+            
+            # Clicar na aba de Reels
+            print("🎬 Procurando e clicando na aba de Reels...")
+            reels_success = self.click_reels_tab()
+            if not reels_success:
+                print("❌ Não foi possível acessar a aba de Reels")
+                return []
+            
+            # Aguardar reels carregarem
+            time.sleep(3)
+            
+            # Fazer scroll para carregar mais reels
+            print("📜 Fazendo scroll para carregar reels...")
+            for i in range(3):
+                self.browser.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                time.sleep(2)
+            
+            # Voltar ao topo
+            self.browser.execute_script("window.scrollTo(0, 0);")
+            time.sleep(2)
+            
+            # Encontrar elementos dos reels
+            print("🔍 Procurando elementos dos reels...")
+            reels_elements = self.browser.find_elements(By.CSS_SELECTOR, 'article div[class*="x1lliihq"]')
+            print(f"📊 Encontrados {len(reels_elements)} elementos de reels")
+            
+            reels_data = []
+            processed_count = 0
+            
+            for i, reel_element in enumerate(reels_elements):
+                if processed_count >= max_reels:
+                    break
+                    
+                try:
+                    print(f"🎬 Processando reel {processed_count + 1}/{max_reels}")
+                    
+                    reel_data = {
+                        'reel_id': '',
+                        'reel_url': '',
+                        'likes': 0,
+                        'comments': 0,
+                        'views': 0,
+                        'thumbnail_url': '',
+                        'caption': '',
+                        'type': 'reel'
+                    }
+                    
+                    # Tentar obter URL do reel
+                    try:
+                        link_element = reel_element.find_element(By.CSS_SELECTOR, 'a[href*="/reel/"]')
+                        reel_url = link_element.get_attribute('href')
+                        reel_data['reel_url'] = reel_url
+                        reel_data['reel_id'] = reel_url.split('/reel/')[-1].rstrip('/')
+                    except:
+                        print(f"⚠️ Não foi possível obter URL do reel {i+1}")
+                    
+                    # Tentar obter thumbnail
+                    try:
+                        img_element = reel_element.find_element(By.CSS_SELECTOR, 'img')
+                        reel_data['thumbnail_url'] = img_element.get_attribute('src')
+                    except:
+                        print(f"⚠️ Não foi possível obter thumbnail do reel {i+1}")
+                    
+                    # Simular hover para obter likes e comentários
+                    try:
+                        from selenium.webdriver.common.action_chains import ActionChains
+                        actions = ActionChains(self.browser)
+                        actions.move_to_element(reel_element).perform()
+                        time.sleep(1)
+                        
+                        # Procurar por elementos de likes e comentários
+                        try:
+                            # Aguardar elementos aparecerem
+                            time.sleep(1)
+                            
+                            # Procurar por spans com números
+                            numeric_spans = self.browser.find_elements(By.CSS_SELECTOR, 'ul li span')
+                            numeric_texts = [span.text.strip() for span in numeric_spans if span.text.strip().replace(',', '').replace('.', '').isdigit()]
+                            
+                            if len(numeric_texts) >= 2:
+                                reel_data['likes'] = self._parse_count(numeric_texts[0])
+                                reel_data['comments'] = self._parse_count(numeric_texts[1])
+                                print(f"✅ Reel {processed_count + 1}: {reel_data['likes']} likes, {reel_data['comments']} comentários")
+                            else:
+                                print(f"⚠️ Não foi possível obter likes/comentários do reel {i+1}")
+                                
+                        except Exception as e:
+                            print(f"⚠️ Erro ao obter métricas do reel {i+1}: {str(e)}")
+                    
+                    except Exception as e:
+                        print(f"⚠️ Erro no hover do reel {i+1}: {str(e)}")
+                    
+                    reels_data.append(reel_data)
+                    processed_count += 1
+                    
+                    # Delay entre reels
+                    if i < len(reels_elements) - 1:
+                        time.sleep(1)
+                    
+                except Exception as e:
+                    print(f"❌ Erro ao processar reel {i+1}: {str(e)}")
+                    continue
+            
+            print(f"🎉 Extração concluída! {len(reels_data)} reels processados")
+            return reels_data
+            
+        except Exception as e:
+            print(f"❌ Erro ao extrair reels: {str(e)}")
+            return []
+
+    def scrapper_reels_web(self, profile_name, max_reels=20):
+        """
+        Scraper simplificado para reels usando automação web
+        
+        Args:
+            profile_name (str): Nome do perfil do Instagram
+            max_reels (int): Número máximo de reels para extrair
+        
+        Returns:
+            dict: Dados estruturados dos reels
+        """
+        try:
+            print(f"🔍 Iniciando scraper de reels para @{profile_name}...")
+            
+            # Garantir que está logado
+            if not self.ensure_logged_in():
+                return {
+                    'success': 0,
+                    'message': 'Falha no login',
+                    'data': []
+                }
+            
+            # Extrair reels usando automação web
+            reels_data = self.get_profile_reels_web(profile_name, max_reels)
+            
+            if not reels_data:
+                return {
+                    'success': 0,
+                    'message': 'Nenhum reel encontrado ou erro na extração',
+                    'data': []
+                }
+            
+            # Calcular estatísticas
+            total_likes = sum(reel['likes'] for reel in reels_data)
+            total_comments = sum(reel['comments'] for reel in reels_data)
+            avg_likes = total_likes // len(reels_data) if reels_data else 0
+            avg_comments = total_comments // len(reels_data) if reels_data else 0
+            
+            # Compilar resultado
+            result = {
+                'success': 1,
+                'message': 'Reels extraídos com sucesso',
+                'data': {
+                    'profile': profile_name,
+                    'total_reels': len(reels_data),
+                    'reels': reels_data,
+                    'statistics': {
+                        'total_likes': total_likes,
+                        'total_comments': total_comments,
+                        'average_likes': avg_likes,
+                        'average_comments': avg_comments
+                    },
+                    'extraction_timestamp': datetime.now().isoformat()
+                }
+            }
+            
+            print(f"✅ Scraper concluído! {len(reels_data)} reels extraídos")
+            return result
+                
+        except Exception as e:
+            print(f"❌ Erro no scraper de reels: {str(e)}")
+            return {
+                'success': 0,
+                'message': f'Erro na extração: {str(e)}',
+                'data': []
+            }
+
+    def test_proxy_connection(self):
+        """
+        Testa a conectividade do proxy fazendo uma requisição simples
+        """
+        try:
+            print("🌐 Testando conectividade do proxy...")
+            
+            # Tentar primeiro com HTTP
+            try:
+                response = requests.get('http://httpbin.org/ip', 
+                                      proxies={'http': self.PROXY_CONFIG['http']}, 
+                                      timeout=10)
+                if response.status_code == 200:
+                    ip_info = response.json()
+                    print(f"✅ Proxy funcionando! IP detectado: {ip_info.get('origin', 'N/A')}")
+                    return True
+            except Exception as e1:
+                print(f"⚠️ Erro com HTTP: {str(e1)}")
+                
+                # Tentar com HTTPS
+                try:
+                    response = requests.get('https://httpbin.org/ip', 
+                                          proxies=self.PROXY_CONFIG, 
+                                          timeout=10, 
+                                          verify=False)
+                    if response.status_code == 200:
+                        ip_info = response.json()
+                        print(f"✅ Proxy funcionando! IP detectado: {ip_info.get('origin', 'N/A')}")
+                return True
+                except Exception as e2:
+                    print(f"⚠️ Erro com HTTPS: {str(e2)}")
+            
+            print("❌ Proxy não está funcionando com nenhum protocolo")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Erro geral ao testar proxy: {str(e)}")
+            return False
+
+    def ensure_logged_in(self):
+        """
+        Garante que está logado (login único)
+        """
+        if not self._is_logged_in:
+            return self.manual_login_instagram()
+        return True
+
+    def create_session(self, mobile=False):
+        """
+        Cria uma sessão do Selenium com configurações específicas para mobile ou web
+        
+        Args:
+            mobile (bool): Se True, configura para parecer o app mobile do Instagram
+                          Se False, configura para navegador web padrão
+        """
+        print(f"Creating Session - Mode: {'Mobile' if mobile else 'Web'}")
+        
+        # Configurando opções do Chrome
+        chrome_options = Options()
+        # chrome_options.add_argument('--headless')  # Executar sem abrir uma janela do Chrome
+        # chrome_options.add_argument('--disable-gpu')
+        # chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])  # Suprimir logs do Chrome
+        # chrome_options.add_argument('--no-sandbox')  # Necessário no WSL
+        # chrome_options.add_argument("--no-sandbox")
+        # chrome_options.add_argument("--headless")  # Executa em modo sem interface - DESABILITADO PARA VISUALIZAÇÃO
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--remote-debugging-port=9230")  # Porta para DevTools
+        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        chrome_options.add_argument("--disable-extensions")
+        chrome_options.add_argument("--disable-plugins")
+        chrome_options.add_argument("--disable-images")  # Carregar mais rápido
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
+        
+        # Configurar proxy para Chrome com credenciais
+        proxy_server = "us.decodo.com:10001"
+        proxy_username = "juicyspace69"
+        proxy_password = "aCQs0w0Qjbj9l9Umex"
+        
+        # Configurar proxy no Chrome
+        chrome_options.add_argument(f'--proxy-server=http://{proxy_server}')
+        chrome_options.add_argument(f'--proxy-auth={proxy_username}:{proxy_password}')
+        
+        print(f"Proxy configurado para Selenium: {proxy_server}")
+        
+        # Adicionar opções para melhor compatibilidade
+        chrome_options.add_argument('--ignore-certificate-errors')
+        chrome_options.add_argument('--ignore-ssl-errors')
+        chrome_options.add_argument('--ignore-certificate-errors-spki-list')
+        chrome_options.add_argument('--disable-web-security')
+        chrome_options.add_argument('--allow-running-insecure-content')
+        chrome_options.add_argument('--disable-features=VizDisplayCompositor')
+        
+        # Configurações específicas para Mobile vs Web
+        if mobile:
+            # Configurações para parecer o app mobile do Instagram
+            print("📱 Configurando para modo MOBILE - Instagram App")
+            
+            # User-Agent do Instagram App (Android)
+            mobile_user_agent = "Mozilla/5.0 (Linux; Android 10; SM-G975F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36 Instagram 155.0.0.37.107 Android (29/10; 420dpi; 1080x2260; samsung; SM-G975F; beyond2; exynos9820; pt_BR; 138226743)"
+            chrome_options.add_argument(f'--user-agent={mobile_user_agent}')
+            
+            # Configurar viewport para mobile
+            chrome_options.add_argument('--window-size=375,812')  # iPhone X dimensions
+            chrome_options.add_argument('--device-scale-factor=3')
+            
+            # Headers específicos para mobile
+            chrome_options.add_argument('--accept-language=pt-BR,pt;q=0.9,en;q=0.8')
+            chrome_options.add_argument('--accept-encoding=gzip, deflate, br')
+            chrome_options.add_argument('--sec-ch-ua-mobile=?1')  # Mobile = 1
+            chrome_options.add_argument('--sec-ch-ua-platform="Android"')
+            chrome_options.add_argument('--sec-ch-ua="Google Chrome";v="91", "Chromium";v="91", ";Not A Brand";v="99"')
+            
+            # Configurações adicionais para mobile
+            chrome_options.add_argument('--touch-events=enabled')
+            chrome_options.add_argument('--enable-features=TouchEventFeatureDetection')
+            chrome_options.add_argument('--disable-features=VizDisplayCompositor')
+            
+            # Simular características de dispositivo móvel
+            mobile_emulation = {
+                "deviceMetrics": {
+                    "width": 375,
+                    "height": 812,
+                    "pixelRatio": 3.0
+                },
+                "userAgent": mobile_user_agent
+            }
+            chrome_options.add_experimental_option("mobileEmulation", mobile_emulation)
+            
+        else:
+            # Configurações para navegador web padrão
+            print("💻 Configurando para modo WEB - Navegador Desktop")
+            
+            # User-Agent mais recente e realista para desktop
+            chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+            
+            # Headers adicionais para parecer mais humano (desktop)
+            chrome_options.add_argument('--accept-language=pt-BR,pt;q=0.9,en;q=0.8')
+            chrome_options.add_argument('--accept-encoding=gzip, deflate, br')
+            chrome_options.add_argument('--sec-ch-ua="Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"')
+            chrome_options.add_argument('--sec-ch-ua-mobile=?0')  # Desktop = 0
+            chrome_options.add_argument('--sec-ch-ua-platform="Windows"')
+        
+        print("Selenium configurado COM proxy")
+        print("Proxy será usado para Selenium, Instaloader e requisições HTTP")
+
+        # Usando o WebDriver Manager para gerenciar o ChromeDriver
+        try:
+            # Tentar instalar o ChromeDriver
+            driver_path = ChromeDriverManager().install()
+            print(f"ChromeDriver instalado em: {driver_path}")
+            chrome_service = Service(driver_path)
+            
+            # Iniciando o WebDriver com a configuração
+            self.browser = webdriver.Chrome(service=chrome_service, options=chrome_options)
+            print("✅ WebDriver criado com sucesso!")
+            
+        except Exception as e:
+            print(f"❌ Erro ao criar WebDriver: {str(e)}")
+            print("Tentando método alternativo...")
+            
+            # Método alternativo: usar ChromeDriver do sistema
+            try:
+                self.browser = webdriver.Chrome(options=chrome_options)
+                print("✅ WebDriver criado com método alternativo!")
+            except Exception as e2:
+                print(f"❌ Erro no método alternativo: {str(e2)}")
+                raise Exception(f"Não foi possível criar o WebDriver. Erro 1: {str(e)}, Erro 2: {str(e2)}")
+        
+    def get_profile_photo_web(self, creator_slug):
+        """
+        Obtém a foto de perfil do usuário usando automação web
+        
+        Args:
+            creator_slug (str): Nome de usuário do Instagram
+        
+        Returns:
+            str: URL da foto de perfil ou None se não encontrada
+        """
+        try:
+            print(f"📸 Obtendo foto de perfil para @{creator_slug}...")
+            
+            # Garantir que está logado
+            if not self.ensure_logged_in():
+                print("❌ Falha no login")
+                return None
+            
+            # Navegar para o perfil
+            profile_url = f"https://www.instagram.com/{creator_slug}/"
+            self.browser.get(profile_url)
+            time.sleep(3)
+            
+            # Procurar pela foto de perfil
+            try:
+                profile_img = self.browser.find_element(By.CSS_SELECTOR, 'header img[alt*="@' + creator_slug + '"]')
+                profile_pic_url = profile_img.get_attribute('src')
+                print(f"✅ Foto de perfil encontrada: {profile_pic_url}")
+                return profile_pic_url
+            except:
+                print("⚠️ Foto de perfil não encontrada")
+                return None
+                
+        except Exception as e:
+            print(f"❌ Erro ao obter foto de perfil: {str(e)}")
+            return None
+    
+    def download_profile_photo(self, creator_slug, save_path="./", size=350):
+        """
+        Baixa a foto de perfil do usuário
+        
+        Args:
+            creator_slug (str): Nome de usuário do Instagram
+            save_path (str): Caminho para salvar a imagem
+            size (int): Tamanho desejado da imagem
+        
+        Returns:
+            str: Caminho do arquivo salvo ou None se falhou
+        """
+        try:
+            print(f"Downloading profile photo for {creator_slug}...")
+            
+            # Garantir que está logado (sessão única)
+            if not self.ensure_logged_in():
+                print("❌ Falha no login, não é possível acessar perfil")
+                return None
+            
+            # Tentar acessar o perfil após login
+            try:
+                profile = instaloader.Profile.from_username(self.L.context, creator_slug)
+            except instaloader.exceptions.PrivateProfileNotFollowedException:
+                print("❌ Perfil privado e você não está seguindo")
+                return None
+            
+            # Baixar apenas a foto de perfil
+            self.L.download_profile(creator_slug, profile_pic_only=True)
+            
+            # O Instaloader salva na pasta com o nome do usuário
+            profile_folder = os.path.join(save_path, creator_slug)
+            if os.path.exists(profile_folder):
+                # Procurar pelo arquivo da foto de perfil
+                for file in os.listdir(profile_folder):
+                    if file.endswith('.jpg') and 'profile_pic' in file:
+                        file_path = os.path.join(profile_folder, file)
+                        print(f"Profile photo saved to: {file_path}")
+                        return file_path
+            
+            print("Profile photo download completed")
+            return None
+            
+        except Exception as e:
+            print(f"Error downloading profile photo: {str(e)}")
+            return None
+
+    def get_profile_data_web(self, creator_slug):
+        """
+        Extrai dados básicos do perfil usando automação web
+        
+        Args:
+            creator_slug (str): Nome de usuário do Instagram
+        
+        Returns:
+            dict: Dados básicos do perfil ou None se falhou
+        """
+        try:
+            print(f"📊 Obtendo dados do perfil @{creator_slug}...")
+            
+            # Garantir que está logado
+            if not self.ensure_logged_in():
+                print("❌ Falha no login")
+                return None
+            
+            # Navegar para o perfil
+            profile_url = f"https://www.instagram.com/{creator_slug}/"
+            self.browser.get(profile_url)
+            time.sleep(5)
+            
+            # Verificar se o perfil existe
+            if "Page Not Found" in self.browser.page_source:
+                print(f"❌ Perfil @{creator_slug} não encontrado")
+                return None
+            
+            # Extrair dados básicos do perfil
+            profile_data = {
+                'username': creator_slug,
+                'full_name': '',
+                'description': '',
+                'website': '',
+                'followers': 0,
+                'following': 0,
+                'uploads': 0,
+                'profile_picture_url': '',
+                'is_private': 0,
+                'is_verified': 0
+            }
+            
+            try:
+                # Nome completo
+                full_name_elem = self.browser.find_element(By.CSS_SELECTOR, 'header h2')
+                profile_data['full_name'] = full_name_elem.text
+            except:
+                pass
+            
+            try:
+                # Descrição/bio
+                bio_elem = self.browser.find_element(By.CSS_SELECTOR, 'header div[data-testid="user-bio"]')
+                profile_data['description'] = bio_elem.text
+            except:
+                pass
+            
+            try:
+                # Contadores de seguidores, seguindo, posts
+                counters = self.browser.find_elements(By.CSS_SELECTOR, 'header section ul li')
+                if len(counters) >= 3:
+                    profile_data['uploads'] = self._parse_count(counters[0].text)
+                    profile_data['followers'] = self._parse_count(counters[1].text)
+                    profile_data['following'] = self._parse_count(counters[2].text)
+            except:
+                pass
+            
+            print(f"✅ Dados do perfil extraídos: {profile_data['followers']} seguidores, {profile_data['uploads']} posts")
+            
+            return profile_data
+            
+        except Exception as e:
+            print(f"❌ Erro ao obter dados do perfil: {str(e)}")
+            return None
+
+    def get_creator_posts(self, creator_slug):
+        """
+        Extrai dados dos posts do Instagram usando Selenium
+        
+        Args:
+            creator_slug (str): Nome de usuário do Instagram
+        
+        Returns:
+            list: Lista de dicionários com dados dos posts ou None se falhou
+        """
+        print("Loading Creator's Page...")
+        
+        import time
+        import random
+        
+        # Tentar diferentes URLs para evitar detecção
+        urls_to_try = [
+            f'https://instagram.com/{creator_slug}/',
+            f'https://www.instagram.com/{creator_slug}/',
+            f'https://instagram.com/{creator_slug}/?hl=pt',
+            f'https://www.instagram.com/{creator_slug}/?hl=pt'
+        ]
+        
+        success = False
+        for url in urls_to_try:
+            try:
+                print(f"Tentando URL: {url}")
+                self.browser.get(url)
+                time.sleep(3)
+                
+                # Verificar se não foi redirecionado para login
+                if "login" not in self.browser.current_url.lower():
+                    print(f"✅ Sucesso com URL: {url}")
+                    success = True
+                    break
+                else:
+                    print(f"❌ Redirecionado para login com: {url}")
+                    
+            except Exception as e:
+                print(f"❌ Erro com URL {url}: {str(e)}")
+                continue
+        
+        if not success:
+            print("❌ Todas as URLs falharam - Instagram pode estar bloqueando")
+            return []
+            
+        print('Getting posts...')
+        
+        try:
+            # Aguardar 60 segundos para dar tempo de inserir credenciais do proxy
+            print("⏳ Aguardando 60 segundos para inserir credenciais do proxy...")
+            print("📝 Insira as credenciais no modal do Chrome:")
+            print("   Usuário: juicyspace69")
+            print("   Senha: aCQs0w0Qjbj9l9Umex")
+            time.sleep(60)
+            
+            # Aguardar até que a página carregue completamente
+            print("🔍 Aguardando página carregar...")
+            try:
+                WebDriverWait(self.browser, 60).until(
+                    EC.presence_of_element_located((By.TAG_NAME, 'main'))
+                )
+                print("✅ Página carregada com sucesso!")
+            except Exception as e:
+                print(f"⚠️ Timeout aguardando página carregar: {str(e)}")
+                print("🔄 Continuando mesmo assim...")
+            
+            # Aguardar um pouco mais para garantir que os posts carreguem
+            # Delay aleatório entre 3-7 segundos para parecer mais humano
+            delay = random.uniform(3, 7)
+            print(f"Aguardando {delay:.1f}s para carregamento...")
+            time.sleep(delay)
+            
+            # Fazer scroll suave para carregar mais posts
+            print("Fazendo scroll para carregar posts...")
+            for i in range(3):
+                self.browser.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                time.sleep(random.uniform(2, 4))
+            
+            # Scroll de volta para o topo
+            self.browser.execute_script("window.scrollTo(0, 0);")
+            time.sleep(2)
+            
+            # Encontrar todos os posts (divs com classe x1lliihq)
+            posts = self.browser.find_elements(By.CSS_SELECTOR, 'article div.x1lliihq')
+            print(f"Found {len(posts)} posts")
+            
+            # Se não encontrou posts, salvar screenshot para debug
+            if len(posts) == 0:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                screenshot_path = f"screenshots/no_posts_found_{creator_slug}_{timestamp}.png"
+                os.makedirs("screenshots", exist_ok=True)
+                self.browser.save_screenshot(screenshot_path)
+                print(f"📸 Screenshot salvo: {screenshot_path}")
+            
+            posts_data = []
+            
+            for i, post in enumerate(posts):
+                try:
+                    print(f"Processing post {i+1}/{len(posts)}")
+                    
+                    # Dados básicos do post
+                    post_data = {
+                        'post_url': '',
+                        'image_src': '',
+                        'image_alt': '',
+                        'post_text': '',
+                        'likes': 0,
+                        'comments': 0,
+                        'tags': [],
+                        'hashtags': [],
+                        'image_description': '',
+                        'screenshot_path': ''
+                    }
+                    
+                    # 1. Pegar URL do post (href do link 'a')
+                    try:
+                        link_element = post.find_element(By.TAG_NAME, 'a')
+                        post_data['post_url'] = link_element.get_attribute('href')
+                    except:
+                        print(f"Could not find post URL for post {i+1}")
+                    
+                    # 2. Pegar imagem (src e alt do img) e extrair tags/hashtags
+                    try:
+                        img_element = post.find_element(By.TAG_NAME, 'img')
+                        post_data['image_src'] = img_element.get_attribute('src')
+                        post_data['image_alt'] = img_element.get_attribute('alt')
+                        
+                        # Extrair tags e hashtags do alt text
+                        alt_parsed = self._parse_alt_text(post_data['image_alt'])
+                        post_data['tags'] = alt_parsed['tags']
+                        post_data['hashtags'] = alt_parsed['hashtags']
+                        post_data['image_description'] = alt_parsed['description']
+                        
+                        if post_data['tags'] or post_data['hashtags']:
+                            print(f"Post {i+1}: Found {len(post_data['tags'])} tags and {len(post_data['hashtags'])} hashtags")
+                            
+                    except:
+                        print(f"Could not find image for post {i+1}")
+                    
+                    # 3. Pegar texto do post (h2->span)
+                    try:
+                        h2_element = post.find_element(By.TAG_NAME, 'h2')
+                        span_element = h2_element.find_element(By.TAG_NAME, 'span')
+                        post_data['post_text'] = span_element.text
+                    except:
+                        print(f"Could not find post text for post {i+1}")
+                    
+                    # 4. Hover no post para mostrar likes e comments e capturar screenshot
+                    try:
+                        # Fazer hover no post
+                        self.browser.execute_script("arguments[0].scrollIntoView(true);", post)
+                        time.sleep(0.5)
+                        
+                        # Simular hover
+                        from selenium.webdriver.common.action_chains import ActionChains
+                        actions = ActionChains(self.browser)
+                        actions.move_to_element(post).perform()
+                        time.sleep(1)
+                        
+                        # Capturar screenshot do post em hover
+                        screenshot_path = self._take_screenshot(post, creator_slug, i)
+                        if screenshot_path:
+                            post_data['screenshot_path'] = screenshot_path
+                        
+                        # Procurar pelos spans com classe 'htmlspan' dentro de ul->li
+                        try:
+                            # Aguardar um pouco para o hover effect aparecer
+                            time.sleep(0.5)
+                            
+                            # Tentar múltiplos seletores para capturar likes e comentários
+                            hover_elements = []
+                            
+                            # Seletor 1: Baseado na estrutura real do HTML fornecido
+                            selector1 = 'ul.x6s0dn4 li span.html-span'
+                            elements1 = self.browser.find_elements(By.CSS_SELECTOR, selector1)
+                            if elements1:
+                                hover_elements = elements1
+                                print(f"Found {len(elements1)} elements with selector1")
+                            
+                            # Seletor 2: Seletor mais genérico como fallback
+                            if not hover_elements:
+                                selector2 = 'ul li span[class*="html-span"]'
+                                elements2 = self.browser.find_elements(By.CSS_SELECTOR, selector2)
+                                if elements2:
+                                    hover_elements = elements2
+                                    print(f"Found {len(elements2)} elements with selector2")
+                            
+                            # Seletor 3: Seletor original como último recurso
+                            if not hover_elements:
+                                selector3 = 'ul li span.htmlspan'
+                                elements3 = self.browser.find_elements(By.CSS_SELECTOR, selector3)
+                                if elements3:
+                                    hover_elements = elements3
+                                    print(f"Found {len(elements3)} elements with selector3")
+                            
+                            # Seletor 4: Procurar por spans com texto numérico dentro de ul
+                            if not hover_elements:
+                                selector4 = 'ul li span'
+                                all_spans = self.browser.find_elements(By.CSS_SELECTOR, selector4)
+                                hover_elements = [span for span in all_spans if span.text.strip().isdigit()]
+                                print(f"Found {len(hover_elements)} numeric spans with selector4")
+                            
+                            if len(hover_elements) >= 2:
+                                # Primeiro span = likes, segundo span = comments
+                                likes_text = hover_elements[0].text.strip()
+                                comments_text = hover_elements[1].text.strip()
+                                
+                                print(f"Raw text - Likes: '{likes_text}', Comments: '{comments_text}'")
+                                
+                                # Converter texto para número
+                                post_data['likes'] = self._parse_count(likes_text)
+                                post_data['comments'] = self._parse_count(comments_text)
+                                
+                                print(f"Post {i+1}: {post_data['likes']} likes, {post_data['comments']} comments")
+                            else:
+                                print(f"Could not find likes/comments for post {i+1}. Found {len(hover_elements)} elements")
+                                # Debug: imprimir todos os elementos encontrados
+                                for idx, elem in enumerate(hover_elements):
+                                    print(f"Element {idx}: text='{elem.text}', tag='{elem.tag_name}', classes='{elem.get_attribute('class')}'")
+                                
+                        except Exception as e:
+                            print(f"Error getting likes/comments for post {i+1}: {str(e)}")
+                    
+                    except Exception as e:
+                        print(f"Error hovering on post {i+1}: {str(e)}")
+                    
+                    posts_data.append(post_data)
+                    
+                    # Delay aleatório entre posts para parecer mais humano
+                    if i < len(posts) - 1:  # Não esperar após o último post
+                        delay = random.uniform(1, 3)
+                        print(f"Aguardando {delay:.1f}s antes do próximo post...")
+                        time.sleep(delay)
+                    
+                except Exception as e:
+                    print(f"Error processing post {i+1}: {str(e)}")
+                    continue
+            
+            print(f"Successfully extracted data from {len(posts_data)} posts")
+            return posts_data
+            
+        except Exception as e:
+            print(f"Error getting creator posts: {str(e)}")
+            return None
+    
+    def click_reels_tab(self):
+        """
+        Clica na aba de Reels do perfil
+        """
+        try:
+            print("🎬 Procurando aba de Reels...")
+            
+            # Aguardar a tablist aparecer
+            WebDriverWait(self.browser, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, 'div[role="tablist"]'))
+            )
+            
+            # Nova lógica: encontrar o elemento <title>Reels</title> e pegar o link <a> pai
+            print("🔍 Procurando por <title>Reels</title>...")
+            
+            # Procurar por todos os elementos title que contenham "Reels"
+            title_elements = self.browser.find_elements(By.XPATH, "//title[text()='Reels']")
+            
+            if title_elements:
+                print(f"✅ Encontrado {len(title_elements)} elemento(s) <title>Reels</title>")
+                
+                # Para cada title encontrado, encontrar o link <a> pai
+                for i, title_element in enumerate(title_elements):
+                    try:
+                        print(f"🔍 Processando title {i+1}...")
+                        
+                        # Encontrar o elemento <a> pai que contém este title
+                        # Usar XPath para encontrar o ancestral <a> mais próximo
+                        parent_link = title_element.find_element(By.XPATH, "./ancestor::a[1]")
+                        
+                        if parent_link:
+                            print(f"✅ Encontrado link pai para title {i+1}")
+                            
+                            # Verificar se o link está na tablist
+                            try:
+                                # Verificar se o link está dentro de uma tablist
+                                tablist_check = parent_link.find_element(By.XPATH, "./ancestor::div[@role='tablist']")
+                                if tablist_check:
+                                    print("✅ Link está dentro da tablist!")
+                                    
+                                    # Este é o link que queremos clicar
+                                    reels_link = parent_link
+                                    break
+                                else:
+                                    print("⚠️ Link não está na tablist, continuando...")
+                                    continue
+                            except:
+                                print("⚠️ Link não está na tablist, continuando...")
+                                continue
+                        else:
+                            print(f"❌ Não foi possível encontrar link pai para title {i+1}")
+                            continue
+                            
+                    except Exception as e:
+                        print(f"⚠️ Erro ao processar title {i+1}: {str(e)}")
+                        continue
+                
+                # Se não encontrou um link válido, tentar abordagem alternativa
+                if 'reels_link' not in locals():
+                    print("🔄 Tentando abordagem alternativa...")
+                    
+                    # Procurar por qualquer elemento que contenha o title "Reels"
+                    reels_elements = self.browser.find_elements(By.XPATH, "//*[contains(., 'Reels')]")
+                    
+                    for element in reels_elements:
+                        try:
+                            # Verificar se é um SVG com title="Reels"
+                            if element.tag_name == 'title' and element.text == 'Reels':
+                                # Encontrar o link pai
+                                parent_link = element.find_element(By.XPATH, "./ancestor::a[1]")
+                                
+                                # Verificar se está na tablist
+                                try:
+                                    tablist_check = parent_link.find_element(By.XPATH, "./ancestor::div[@role='tablist']")
+                                    if tablist_check:
+                                        reels_link = parent_link
+                                        print("✅ Encontrado link via abordagem alternativa!")
+                                        break
+                                except:
+                                    continue
+                        except:
+                            continue
+            
+            # Se ainda não encontrou, tentar seletores mais genéricos
+            if 'reels_link' not in locals():
+                print("🔄 Tentando seletores genéricos...")
+                
+                # Procurar por links na tablist que contenham SVG
+                tablist_links = self.browser.find_elements(By.CSS_SELECTOR, 'div[role="tablist"] a')
+                
+                for link in tablist_links:
+                    try:
+                        # Verificar se contém um SVG com title="Reels"
+                        svg_titles = link.find_elements(By.CSS_SELECTOR, 'svg title')
+                        for svg_title in svg_titles:
+                            if svg_title.text == 'Reels':
+                                reels_link = link
+                                print("✅ Encontrado link via seletor genérico!")
+                                break
+                        
+                        if 'reels_link' in locals():
+                            break
+                            
+                    except Exception as e:
+                        continue
+            
+            if 'reels_link' in locals() and reels_link:
+                print("🖱️ Clicando na aba de Reels...")
+                
+                # Scroll para o elemento se necessário
+                self.browser.execute_script("arguments[0].scrollIntoView(true);", reels_link)
+                time.sleep(1)
+                
+                # Tentar clicar
+                try:
+                    reels_link.click()
+                    print("✅ Clique realizado com sucesso!")
+                except Exception as e:
+                    print(f"⚠️ Erro ao clicar, tentando JavaScript: {str(e)}")
+                    self.browser.execute_script("arguments[0].click();", reels_link)
+                    print("✅ Clique via JavaScript realizado!")
+                
+                # Aguardar a página carregar
+                time.sleep(3)
+                
+                # Verificar se estamos na página de Reels
+                current_url = self.browser.current_url
+                if "/reels/" in current_url:
+                    print("✅ Sucesso! Navegando para página de Reels")
+                    return True
+                else:
+                    print(f"⚠️ URL atual: {current_url}")
+                    # Mesmo que não tenha mudado a URL, pode ter funcionado
+                    return True
+            else:
+                print("❌ Nenhum link de Reels encontrado")
+                
+                # Salvar screenshot para debug
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                screenshot_path = f"screenshots/reels_tab_not_found_{timestamp}.png"
+                os.makedirs("screenshots", exist_ok=True)
+                self.browser.save_screenshot(screenshot_path)
+                print(f"📸 Screenshot salvo para debug: {screenshot_path}")
+                
+                return False
+                
+        except Exception as e:
+            print(f"❌ Erro ao clicar na aba de Reels: {str(e)}")
+            return False
+    
+    def get_creator_reels(self, creator_slug):
+        """
+        Extrai dados dos reels do Instagram usando Selenium
+        
+        Args:
+            creator_slug (str): Nome de usuário do Instagram
+        
+        Returns:
+            list: Lista de dicionários com dados dos reels ou None se falhou
+        """
+        try:
+            print(f"🎬 Extraindo reels de: {creator_slug}")
+            
+            # Primeiro, tentar clicar na aba de Reels
+            reels_success = self.click_reels_tab()
+            if not reels_success:
+                print("❌ Falha ao acessar aba de Reels")
+                return []
+            
+            # Aguardar um pouco para os reels carregarem
+            import time
+            import random
+            delay = random.uniform(3, 7)
+            print(f"Aguardando {delay:.1f}s para reels carregarem...")
+            time.sleep(delay)
+            
+            # Fazer scroll para carregar mais reels
+            print("Fazendo scroll para carregar reels...")
+            for i in range(3):
+                self.browser.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                time.sleep(random.uniform(2, 4))
+            
+            # Scroll de volta para o topo
+            self.browser.execute_script("window.scrollTo(0, 0);")
+            time.sleep(2)
+            
+            # Encontrar todos os reels (divs com classe x1lliihq)
+            reels = self.browser.find_elements(By.CSS_SELECTOR, 'article div.x1lliihq')
+            print(f"Found {len(reels)} reels")
+            
+            # Se não encontrou reels, salvar screenshot para debug
+            if len(reels) == 0:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                screenshot_path = f"screenshots/no_reels_found_{creator_slug}_{timestamp}.png"
+                os.makedirs("screenshots", exist_ok=True)
+                self.browser.save_screenshot(screenshot_path)
+                print(f"📸 Screenshot salvo: {screenshot_path}")
+                return []
+            
+            reels_data = []
+            
+            for i, reel in enumerate(reels):
+                try:
+                    print(f"Processing reel {i+1}/{len(reels)}")
+                    
+                    # Dados básicos do reel
+                    reel_data = {
+                        'reel_url': '',
+                        'reel_id': '',
+                        'likes': 0,
+                        'comments': 0,
+                        'screenshot_path': '',
+                        'type': 'reel'
+                    }
+                    
+                    # Tentar obter URL do reel
+                    try:
+                        reel_link = reel.find_element(By.CSS_SELECTOR, 'a[href*="/reel/"]')
+                        reel_data['reel_url'] = reel_link.get_attribute('href')
+                        reel_data['reel_id'] = reel_data['reel_url'].split('/reel/')[-1].rstrip('/')
+                        print(f"Reel {i+1} URL: {reel_data['reel_url']}")
+                    except Exception as e:
+                        print(f"Could not get URL for reel {i+1}: {str(e)}")
+                    
+                    # Simular hover para obter likes e comentários
+                    try:
+                        from selenium.webdriver.common.action_chains import ActionChains
+                        actions = ActionChains(self.browser)
+                        actions.move_to_element(reel).perform()
+                        time.sleep(1)
+                        
+                        # Capturar screenshot do reel em hover
+                        screenshot_path = self._take_screenshot(reel, creator_slug, i, prefix="reel")
+                        if screenshot_path:
+                            reel_data['screenshot_path'] = screenshot_path
+                        
+                        # Procurar pelos spans com likes e comentários
+                        try:
+                            time.sleep(0.5)
+                            
+                            # Tentar múltiplos seletores para capturar likes e comentários
+                            hover_elements = []
+                            
+                            # Seletor 1: Baseado na estrutura real do HTML
+                            selector1 = 'ul.x6s0dn4 li span.html-span'
+                            elements1 = self.browser.find_elements(By.CSS_SELECTOR, selector1)
+                            if elements1:
+                                hover_elements = elements1
+                                print(f"Found {len(elements1)} elements with selector1")
+                            
+                            # Seletor 2: Seletor mais genérico como fallback
+                            if not hover_elements:
+                                selector2 = 'ul li span[class*="html-span"]'
+                                elements2 = self.browser.find_elements(By.CSS_SELECTOR, selector2)
+                                if elements2:
+                                    hover_elements = elements2
+                                    print(f"Found {len(elements2)} elements with selector2")
+                            
+                            # Seletor 3: Procurar por spans com texto numérico dentro de ul
+                            if not hover_elements:
+                                selector3 = 'ul li span'
+                                all_spans = self.browser.find_elements(By.CSS_SELECTOR, selector3)
+                                hover_elements = [span for span in all_spans if span.text.strip().isdigit()]
+                                print(f"Found {len(hover_elements)} numeric spans with selector3")
+                            
+                            if len(hover_elements) >= 2:
+                                # Primeiro span = likes, segundo span = comments
+                                likes_text = hover_elements[0].text.strip()
+                                comments_text = hover_elements[1].text.strip()
+                                
+                                print(f"Raw text - Likes: '{likes_text}', Comments: '{comments_text}'")
+                                
+                                # Converter texto para número
+                                reel_data['likes'] = self._parse_count(likes_text)
+                                reel_data['comments'] = self._parse_count(comments_text)
+                                
+                                print(f"Reel {i+1}: {reel_data['likes']} likes, {reel_data['comments']} comments")
+                            else:
+                                print(f"Could not find likes/comments for reel {i+1}. Found {len(hover_elements)} elements")
+                                
+                        except Exception as e:
+                            print(f"Error getting likes/comments for reel {i+1}: {str(e)}")
+                    
+                    except Exception as e:
+                        print(f"Error hovering on reel {i+1}: {str(e)}")
+                    
+                    reels_data.append(reel_data)
+                    
+                    # Delay aleatório entre reels para parecer mais humano
+                    if i < len(reels) - 1:  # Não esperar após o último reel
+                        delay = random.uniform(1, 3)
+                        print(f"Aguardando {delay:.1f}s antes do próximo reel...")
+                        time.sleep(delay)
+                    
+                except Exception as e:
+                    print(f"Error processing reel {i+1}: {str(e)}")
+                    continue
+            
+            print(f"Successfully extracted data from {len(reels_data)} reels")
+            return reels_data
+            
+        except Exception as e:
+            print(f"❌ Falha ao extrair reels: {str(e)}")
+            return []
+
+    def get_creator_reels_instaloader(self, creator_slug, max_count=50):
+        """
+        Extrai dados dos reels do Instagram usando Instaloader (mais eficiente)
+        
+        Args:
+            creator_slug (str): Nome de usuário do Instagram
+            max_count (int): Número máximo de reels para extrair
+        
+        Returns:
+            list: Lista de dicionários com dados dos reels ou None se falhou
+        """
+        try:
+            print(f"🎬 Extraindo reels de {creator_slug} usando Instaloader...")
+            
+            # Garantir que está logado (sessão única)
+            if not self.ensure_logged_in():
+                print("❌ Falha no login, não é possível acessar perfil")
+                return []
+            
+            # Tentar acessar o perfil após login
+            try:
+                profile = instaloader.Profile.from_username(self.L.context, creator_slug)
+            except instaloader.exceptions.PrivateProfileNotFollowedException:
+                print("❌ Perfil privado e você não está seguindo")
+                return []
+            
+            reels_data = []
+            count = 0
+            
+            print(f"🔍 Analisando posts para encontrar reels...")
+            
+            # Iterar pelos posts do perfil
+            for post in profile.get_posts():
+                if count >= max_count:
+                    break
+                    
+                # Verificar se é um reel (tem vídeo e é curto)
+                if post.is_video and post.video_duration and post.video_duration <= 90:  # Reels são até 90 segundos
+                    print(f"📹 Reel encontrado: {post.shortcode}")
+                    
+                    reel_data = {
+                        'reel_id': post.shortcode,
+                        'reel_url': f"https://www.instagram.com/reel/{post.shortcode}/",
+                        'likes': post.likes,
+                        'comments': post.comments,
+                        'views': post.video_view_count if hasattr(post, 'video_view_count') else 0,
+                        'caption': post.caption if post.caption else '',
+                        'date': post.date.isoformat() if post.date else '',
+                        'video_url': post.video_url if post.video_url else '',
+                        'thumbnail_url': post.url if post.url else '',
+                        'type': 'reel',
+                        'duration': post.video_duration if post.video_duration else 0,
+                        'hashtags': [],
+                        'mentions': []
+                    }
+                    
+                    # Extrair hashtags e menções do caption
+                    if post.caption:
+                        import re
+                        reel_data['hashtags'] = re.findall(r'#(\w+)', post.caption)
+                        reel_data['mentions'] = re.findall(r'@(\w+)', post.caption)
+                    
+                    reels_data.append(reel_data)
+                    count += 1
+                    
+                    print(f"✅ Reel {count}: {reel_data['likes']} likes, {reel_data['comments']} comments")
+                    
+                    # Delay para evitar rate limiting
+                    import time
+                    time.sleep(0.5)
+            
+            print(f"🎉 Total de reels extraídos: {len(reels_data)}")
+            return reels_data
+            
+        except instaloader.exceptions.ProfileNotExistsException:
+            print(f"❌ Perfil {creator_slug} não existe")
+            return []
+        except Exception as e:
+            print(f"❌ Erro ao extrair reels com Instaloader: {str(e)}")
+            return []
+    
+    def test_reels_functionality(self, creator_slug):
+        """
+        Testa a funcionalidade de extrair Reels
+        """
+        try:
+            print(f"🎬 Testando funcionalidade de Reels para: {creator_slug}")
+            
+            # Primeiro tentar com Instaloader (mais eficiente)
+            print("🔄 Tentando extrair reels com Instaloader...")
+            reels_data = self.get_creator_reels_instaloader(creator_slug, max_count=10)
+            
+            if reels_data and len(reels_data) > 0:
+                print(f"✅ Sucesso com Instaloader! Extraídos {len(reels_data)} reels")
+                return reels_data
+            else:
+                print("⚠️ Instaloader não conseguiu extrair reels, tentando com Selenium...")
+                # Fallback para Selenium
+                reels_data = self.get_creator_reels(creator_slug)
+                
+                if reels_data:
+                    print(f"✅ Sucesso com Selenium! Extraídos {len(reels_data)} reels")
+                    return reels_data
+                else:
+                    print("❌ Falha ao extrair reels com ambos os métodos")
+                    return None
+                
+        except Exception as e:
+            print(f"❌ Erro no teste de Reels: {str(e)}")
+            return None
+    
+    def _parse_count(self, count_text):
+        """
+        Converte texto de contagem (ex: "1.2K", "500", "1.5M") para número
+        
+        Args:
+            count_text (str): Texto da contagem
+        
+        Returns:
+            int: Número convertido
+        """
+        if not count_text:
+            return 0
+            
+        count_text = count_text.strip().upper()
+        
+        # Remover caracteres não numéricos exceto K, M, B
+        import re
+        match = re.search(r'([\d.,]+)([KMB]?)', count_text)
+        
+        if not match:
+            return 0
+            
+        number = float(match.group(1).replace(',', '.'))
+        suffix = match.group(2)
+        
+        if suffix == 'K':
+            return int(number * 1000)
+        elif suffix == 'M':
+            return int(number * 1000000)
+        elif suffix == 'B':
+            return int(number * 1000000000)
+        else:
+            return int(number)
+    
+    def _parse_alt_text(self, alt_text):
+        """
+        Extrai tags (@username) e hashtags (#hashtag) do texto do alt da imagem
+        
+        Args:
+            alt_text (str): Texto do alt da imagem
+        
+        Returns:
+            dict: Dicionário com tags e hashtags separadas
+        """
+        if not alt_text:
+            return {
+                'tags': [],
+                'hashtags': [],
+                'description': ''
+            }
+        
+        import re
+        
+        # Extrair tags (@username)
+        tags = re.findall(r'@(\w+)', alt_text)
+        
+        # Extrair hashtags (#hashtag)
+        hashtags = re.findall(r'#(\w+)', alt_text)
+        
+        # Remover tags e hashtags do texto para obter a descrição limpa
+        description = alt_text
+        
+        # Remover tags
+        for tag in tags:
+            description = description.replace(f'@{tag}', '')
+        
+        # Remover hashtags
+        for hashtag in hashtags:
+            description = description.replace(f'#{hashtag}', '')
+        
+        # Limpar espaços extras e caracteres especiais
+        description = re.sub(r'\s+', ' ', description).strip()
+        description = re.sub(r'[^\w\s.,!?()-]', '', description)
+        
+        return {
+            'tags': tags,
+            'hashtags': hashtags,
+            'description': description
+        }
+    
+    def _take_screenshot(self, post_element, creator_slug, post_index, prefix="post"):
+        """
+        Captura screenshot do post em hover
+        
+        Args:
+            post_element: Elemento do post no Selenium
+            creator_slug (str): Nome de usuário do Instagram
+            post_index (int): Índice do post
+            prefix (str): Prefixo do arquivo (post, reel, etc.)
+        
+        Returns:
+            str: Caminho do arquivo de screenshot ou None se falhou
+        """
+        try:
+            # Criar nome do arquivo com timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"{creator_slug}_{prefix}_{post_index+1}_{timestamp}.png"
+            screenshot_path = os.path.join(os.path.dirname(__file__), "screenshots", filename)
+            
+            # Capturar screenshot do elemento específico
+            post_element.screenshot(screenshot_path)
+            
+            print(f"Screenshot salvo: {screenshot_path}")
+            return screenshot_path
+            
+        except Exception as e:
+            print(f"Erro ao capturar screenshot do post {post_index+1}: {str(e)}")
+            return None
+    
+    def test_alt_parsing(self):
+        """
+        Função de teste para verificar o parsing do alt text
+        """
+        test_text = "Photo shared by NBA on August 14, 2025 tagging @nbaonespn, @nbaonprime, and @nbaonnbc. #nba May be an image of  basketball, basketball jersey, ball, scoreboard, sports equipment and  text that says ' NBA TIP-OFF OFF 2025 OPENING WEEK OCT. 21 TUESDAY, 7:30 PM ET 10:00 AKERS LOSANGELE PM ET NBC peacock WEDNESDAY, 7:00 KNICKS PM ET OCT. 22 9:30 الن) PM ET ESPN OCT. DKG THURSDAY, 7:30 PM ET 23 3 10:00 PM ET ESPR OCT. 24 OOD ጉሬ FRIDAY, 7:30 KNICKS PM ET 10:00 AKERS 10:00ZARRS LOSANGELE PM ET prime '."
+        
+        result = self._parse_alt_text(test_text)
+        
+        print("=== TESTE DE PARSING DO ALT TEXT ===")
+        print(f"Texto original: {test_text[:100]}...")
+        print(f"Tags encontradas: {result['tags']}")
+        print(f"Hashtags encontradas: {result['hashtags']}")
+        print(f"Descrição limpa: {result['description'][:200]}...")
+        print("=====================================")
+        
+        return result
+    
+    def get_artist_totalplays(self, artist_id):
+        print("Loading Artist's Page...")
+        self.browser.get(f'https://open.spotify.com/intl-pt/artist/{artist_id}/')
+        print('Getting totalplays...')
+        try:
+            # Aguardar até que o elemento com 'ouvintes mensais' esteja presente
+            monthly_listeners_element = WebDriverWait(self.browser, 20).until(
+                EC.presence_of_element_located((By.XPATH, '//span[contains(text(), "monthly listeners")]'))
+            )
+            print('Getting totalplays...2')
+            # Extrair o texto (ex: "626.911 ouvintes mensais")
+            monthly_listeners_text = monthly_listeners_element.text
+            
+            # Usa regex para extrair apenas o número do texto
+            monthly_listeners_count = re.search(r'(\d[\d.,]*)', monthly_listeners_text)
+            print('Getting totalplays...3')
+            if monthly_listeners_count:
+                # Converte o valor para um número inteiro, removendo pontos e vírgulas
+                listeners_count = int(monthly_listeners_count.group(1).replace('.', '').replace(',', ''))
+                print(f"Monthly listeners: {listeners_count}")
+                return listeners_count
+            else:
+                print("Could not find the monthly listeners count.")
+                return None
+        except selenium.common.exceptions.NoSuchElementException:
+            print("Element for monthly listeners not found.")
+            return None
+    
+    def get_token(self):
+        url = 'https://accounts.spotify.com/api/token'
+        headers = {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Authorization': 'Basic ' + base64.b64encode(f"{self.client_id}:{self.client_secret}".encode('utf-8')).decode('utf-8'),
+        }
+        data = {
+            'grant_type': 'client_credentials',
+        }
+        response = requests.post(url, headers=headers, data=data, proxies=self.PROXY_CONFIG)
+        return response.json()
+
+    def get_track_info(self, access_token):
+        url = "https://api.spotify.com/v1/tracks/4cOdK2wGLETKBW3PvgPWqT"  # Replace with your track ID
+        headers = {
+            'Authorization': f'Bearer {access_token}'
+        }
+        response = requests.get(url, headers=headers, proxies=self.PROXY_CONFIG)
+        return response.json()
+    
+    def get_artist_data(self, artist_name, access_token):
+        url = 'https://api.spotify.com/v1/search'
+        headers = {
+            'Authorization': f'Bearer {access_token}'
+        }
+        params = {
+            'q': 'artist:'+artist_name,
+            'type': 'artist',
+            'market': 'BR',
+            'limit': 1,
+            'offset': 0
+        }
+        response = requests.get(url, headers=headers, params=params, proxies=self.PROXY_CONFIG)
+        print(artist_name)
+        return response.json()
+    
+    def get_artist(self, artist_id, access_token):
+        url = f'https://api.spotify.com/v1/artists/{artist_id}'
+        headers = {
+            'Authorization': f'Bearer {access_token}'
+        }       
+        response = requests.get(url, headers=headers, proxies=self.PROXY_CONFIG)
+        return response.json()
+    
+    def get_artist_related(self, artist_id, access_token):
+        # url = f'https://api.spotify.com/v1/artists/{artist_id}/related-artists'
+        # headers = {
+        #     'Authorization': f'Bearer {access_token}'
+        # }       
+        # response = requests.get(url, headers=headers)
+        # return response.json()
+    
+        print("Loading Related's Page...")
+        self.browser.get(f'https://open.spotify.com/intl-pt/artist/{artist_id}/')
+        print('Getting artist_related...')
+        try:
+            # Aguardar até que o elemento com 'Fans also like' esteja presente no aria-label
+            fans_also_like_element = WebDriverWait(self.browser, 5).until(
+                EC.presence_of_element_located((By.XPATH, '//section[@aria-label="Fans also like"]'))
+            )
+            
+            # Capturar o HTML do elemento 'Fans also like'
+            fans_also_like_html = fans_also_like_element.get_attribute('outerHTML')
+
+            # Usar BeautifulSoup para analisar o HTML
+            soup = BeautifulSoup(fans_also_like_html, 'html.parser')
+
+            # Agora você pode usar BeautifulSoup para encontrar os cards de artistas
+            artist_cards = soup.find_all('div', class_='Card')
+            # print(artist_cards)
+            # Extrair dados dos artistas
+            artists_related = []
+            for card in artist_cards:
+                # Nome do artista
+                name_tag = card.find('p')
+                name = name_tag.text if name_tag else 'N/A'
+                
+                # ID do artista (extraído do atributo 'aria-labelledby')
+                card_id = card.get('aria-labelledby', '').split(':')[2].split('-')[0] if 'aria-labelledby' in card.attrs else 'N/A'
+                
+                # Link do artista
+                link_tag = card.find('a')
+                link = 'https://open.spotify.com' + link_tag['href'] if link_tag else 'N/A'
+                
+                # URL da imagem do artista
+                image_tag = card.find('img', {'data-testid': 'card-image'})
+                image_url = image_tag['src'] if image_tag else 'N/A'
+                
+                # Adicionar ao resultado
+                artists_related.append({
+                    'name': name,
+                    'id': card_id,
+                    'link': link,
+                    'image': image_url
+                })
+            print(artists_related)
+            artist_related_master =[]
+            # Mostrar os artistas extraídos
+    
+            for artist_related in artists_related[:5]:
+                print(artist_related)
+                related_artist = self.get_artist(artist_related['id'],access_token)
+                artist_related_master.append({
+                    "id": artist_id,
+                    "name": related_artist['name'],
+                    "link": related_artist['external_urls']['spotify'],
+                    "followers": related_artist['followers']['total'],
+                    "genres": related_artist['genres'],
+                    "image640": related_artist['images'][0]['url'],
+                    "image320": related_artist['images'][1]['url'],
+                    "popularity": related_artist['popularity']
+                })
+            print(artist_related_master)
+
+            return artist_related_master
+            
+        except TimeoutException:
+            # Caso o elemento não seja encontrado
+            print("Elemento 'Fans also like' não encontrado. Retornando lista vazia.")
+            return []
+
+    def get_artist_albuns(self, artist_id, access_token):
+        url = f'https://api.spotify.com/v1/artists/{artist_id}/albums'
+        headers = {
+            'Authorization': f'Bearer {access_token}'
+        }
+        params = {
+            'include_groups': 'single, album',            
+            'market': 'BR',
+            'limit': 5,
+            'offset': 0
+        }
+        response = requests.get(url, headers=headers, params=params, proxies=self.PROXY_CONFIG)
+        return response.json()
+    
+    def get_artist_tracks(self, artist_id, access_token):
+        url = f'https://api.spotify.com/v1/artists/{artist_id}/top-tracks'
+        headers = {
+            'Authorization': f'Bearer {access_token}'
+        }
+        params = {                       
+            'market': 'BR'
+        }
+        response = requests.get(url, headers=headers, params=params, proxies=self.PROXY_CONFIG)
+        self.quit_session()
+
+        return response.json()
+
+    def test_proxy_connection(self):
+        """
+        Testa a conectividade do proxy fazendo uma requisição simples
+        """
+        try:
+            print("Testando conectividade do proxy...")
+            
+            # Tentar primeiro com HTTP
+            try:
+                response = requests.get('http://httpbin.org/ip', 
+                                      proxies={'http': self.PROXY_CONFIG['http']}, 
+                                      timeout=10)
+                if response.status_code == 200:
+                    ip_info = response.json()
+                    print(f"Proxy funcionando! IP detectado: {ip_info.get('origin', 'N/A')}")
+                    return True
+            except Exception as e1:
+                print(f"Erro com HTTP: {str(e1)}")
+                
+                # Tentar com HTTPS
+                try:
+                    response = requests.get('https://httpbin.org/ip', 
+                                          proxies=self.PROXY_CONFIG, 
+                                          timeout=10, 
+                                          verify=False)
+                    if response.status_code == 200:
+                        ip_info = response.json()
+                        print(f"Proxy funcionando! IP detectado: {ip_info.get('origin', 'N/A')}")
+                        return True
+                except Exception as e2:
+                    print(f"Erro com HTTPS: {str(e2)}")
+            
+            print("Proxy não está funcionando com nenhum protocolo")
+            return False
+            
+        except Exception as e:
+            print(f"Erro geral ao testar proxy: {str(e)}")
+            return False
+
+    def test_instaloader_proxy(self):
+        """
+        Testa se o Instaloader está usando o proxy corretamente
+        """
+        try:
+            print("🌐 Testando proxy no Instaloader...")
+            
+            # Verificar configuração atual
+            if hasattr(self.L.context._session, 'proxies') and self.L.context._session.proxies:
+                print(f"✅ Proxy configurado na sessão: {self.L.context._session.proxies}")
+            else:
+                print("⚠️ Proxy não detectado, reconfigurando...")
+                self._configure_instaloader_proxy()
+            
+            # Testar conectividade através do Instaloader
+            import requests
+            test_url = 'https://httpbin.org/ip'
+            
+            # Usar a mesma sessão do Instaloader
+            response = self.L.context._session.get(test_url, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                print(f"✅ Instaloader usando proxy! IP: {data.get('origin', 'N/A')}")
+                return True
+            else:
+                print(f"❌ Instaloader retornou status: {response.status_code}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Erro ao testar proxy no Instaloader: {str(e)}")
+            return False
+
+    def test_instagram_connection(self, creator_slug="instagram"):
+        """
+        Testa a conexão com Instagram usando Instaloader (login único)
+        """
+        try:
+            print("🔍 Testando conexão com Instagram...")
+            
+            # Testar proxy primeiro
+            if not self.test_proxy_connection():
+                print("❌ Proxy não está funcionando")
+                return False
+            
+            # Testar login único
+            print("🔐 Testando login único no Instagram...")
+            if not self.manual_login_instagram():
+                print("❌ Falha no login do Instagram")
+                return False
+            
+            # Testar acesso a um perfil público (reutilizando sessão)
+            print(f"👤 Testando acesso ao perfil: {creator_slug} (sessão ativa)")
+            profile_data = self.get_profile_data_web(creator_slug)
+            
+            if profile_data:
+                print(f"✅ Sucesso! Perfil acessado: {profile_data['username']}")
+                print(f"   Seguidores: {profile_data['followers']:,}")
+                print(f"   Posts: {profile_data['uploads']:,}")
+                print("🔒 Sessão ativa - pronta para uso em outras funções")
+                return True
+            else:
+                print("❌ Falha ao acessar perfil")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Erro no teste de conexão: {str(e)}")
+            return False
+
+    def get_creator_complete_data(self, creator_slug, max_reels=20):
+        """
+        Captura todos os dados do criador em uma única sessão (login único)
+        
+        Args:
+            creator_slug (str): Nome de usuário do Instagram
+            max_reels (int): Número máximo de reels para extrair
+        
+        Returns:
+            dict: Dicionário com todos os dados do criador
+        """
+        try:
+            print(f"🚀 Capturando dados completos de @{creator_slug} em sessão única...")
+            
+            # Login único
+            if not self.ensure_logged_in():
+                print("❌ Falha no login")
+                return None
+            
+            print("🔒 Sessão ativa - capturando dados...")
+            
+            # 1. Dados do perfil
+            print("\n📊 1/3 - Capturando dados do perfil...")
+            profile_data = self.get_profile_data_web(creator_slug)
+            
+            # 2. Foto de perfil
+            print("\n📸 2/3 - Capturando foto de perfil...")
+            profile_photo_url = self.get_profile_photo_web(creator_slug)
+            
+            # 3. Reels
+            print(f"\n🎬 3/3 - Capturando reels (máx: {max_reels})...")
+            reels_data = self.get_profile_reels_web(creator_slug, max_reels)
+            
+            # Compilar dados completos
+            complete_data = {
+                'creator_slug': creator_slug,
+                'profile_data': profile_data,
+                'profile_photo_url': profile_photo_url,
+                'reels_data': reels_data,
+                'total_reels': len(reels_data) if reels_data else 0,
+                'extraction_timestamp': datetime.now().isoformat(),
+                'session_info': {
+                    'login_successful': self._is_logged_in,
+                    'data_sources': ['instaloader']
+                }
+            }
+            
+            # Estatísticas
+            if reels_data:
+                total_likes = sum(reel['likes'] for reel in reels_data)
+                total_comments = sum(reel['comments'] for reel in reels_data)
+                total_views = sum(reel['views'] for reel in reels_data)
+                
+                complete_data['statistics'] = {
+                    'total_likes': total_likes,
+                    'total_comments': total_comments,
+                    'total_views': total_views,
+                    'avg_likes_per_reel': total_likes // len(reels_data) if reels_data else 0,
+                    'avg_comments_per_reel': total_comments // len(reels_data) if reels_data else 0
+                }
+            
+            print(f"\n🎉 Captura completa finalizada!")
+            print(f"   ✅ Perfil: {'Sim' if profile_data else 'Não'}")
+            print(f"   ✅ Foto: {'Sim' if profile_photo_url else 'Não'}")
+            print(f"   ✅ Reels: {len(reels_data) if reels_data else 0}")
+            
+            return complete_data
+            
+        except Exception as e:
+            print(f"❌ Erro na captura completa: {str(e)}")
+            return None
+
+    def scrapper(self, profile_name, login=None, senha=None):
+        """
+        Função que replica exatamente o comportamento do script PHP
+        Captura dados completos do perfil, posts e reels com estatísticas
+        
+        Args:
+            profile_name (str): Nome do perfil do Instagram
+            login (str): Username para login (opcional, usa credenciais padrão)
+            senha (str): Senha para login (opcional, usa credenciais padrão)
+        
+        Returns:
+            dict: Dados estruturados igual ao PHP
+        """
+        import signal
+        
+        # Função para timeout
+        def timeout_handler(signum, frame):
+            raise TimeoutError("Timeout na captura de dados")
+        
+        try:
+            print(f"🔍 Iniciando scraper para @{profile_name}...")
+            
+            # Configurar timeout de 5 minutos
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(300)  # 5 minutos
+            
+            # Usar credenciais fornecidas ou padrão
+            if login and senha:
+                self.instagram_credentials['username'] = login
+                self.instagram_credentials['password'] = senha
+                print(f"🔐 Usando credenciais fornecidas: {login}")
+            
+            # Fazer login único
+            if not self.ensure_logged_in():
+                signal.alarm(0)  # Cancelar timeout
+                return {
+                    'success': 0,
+                    'message': 'problemas em conseguir os dados',
+                    'data': []
+                }
+            
+            print("⏳ Aguardando 2s após login...")
+            import time
+            time.sleep(2)
+            
+            # Capturar dados do perfil
+            profile = instaloader.Profile.from_username(self.L.context, profile_name)
+            
+            print("⏳ Aguardando 2s após capturar perfil...")
+            time.sleep(2)
+            
+            # Verificações iniciais
+            if profile.followers < 1000:
+                return {
+                    'success': 0,
+                    'message': 'O usuário não tem o mínimo de followers',
+                    'data': []
+                }
+            
+            if profile.is_private:
+                return {
+                    'success': 0,
+                    'message': 'O perfil é privado',
+                    'data': []
+                }
+            
+            # Dados básicos do perfil
+            source_account_new = {
+                'instagram_id': profile.userid,
+                'username': profile.username,
+                'full_name': profile.full_name if profile.full_name else profile.username,
+                'description': profile.biography if profile.biography else '',
+                'website': profile.external_url if profile.external_url else '',
+                'followers': profile.followers,
+                'following': profile.followees,
+                'uploads': profile.mediacount,
+                'profile_picture_url': profile.profile_pic_url,
+                'is_private': 1 if profile.is_private else 0,
+                'is_verified': 1 if profile.is_verified else 0
+            }
+            
+            print("⏳ Aguardando 2s antes de capturar reels...")
+            time.sleep(2)
+            
+            # Arrays para estatísticas
+            likes_array = {}
+            comments_array = {}
+            engagement_rate_array = {}
+            hashtags_array = {}
+            mentions_array = {}
+            
+            # Arrays para reels
+            likes_array_reels = {}
+            comments_array_reels = {}
+            engagement_rate_array_reels = {}
+            video_views_array_reels = {}
+            
+            # Capturar reels (pular os 3 primeiros) - COM LIMITE PARA EVITAR LOOP
+            print("🎬 Capturando reels...")
+            count_reels = 0
+            max_posts_checked = 50  # Limite máximo de posts para verificar
+            
+            try:
+                for i, post in enumerate(profile.get_posts()):
+                    if i >= max_posts_checked:  # Evitar loop infinito
+                        print(f"⚠️ Limite de {max_posts_checked} posts atingido")
+                        break
+                        
+                    if post.is_video and post.video_duration and post.video_duration <= 90:
+                        count_reels += 1
+                        if count_reels > 3:  # Pular os 3 primeiros
+                            likes_array_reels[post.shortcode] = post.likes
+                            comments_array_reels[post.shortcode] = post.comments
+                            video_views_array_reels[post.shortcode] = getattr(post, 'video_view_count', 0)
+                            engagement_rate_array_reels[post.shortcode] = round(
+                                (post.likes + post.comments) / source_account_new['followers'] * 100, 2
+                            )
+                        
+                        # Limitar a 20 reels para evitar demora excessiva
+                        if count_reels > 20:
+                            print("⚠️ Limite de 20 reels atingido")
+                            break
+                            
+            except Exception as e:
+                print(f"⚠️ Erro ao capturar reels: {str(e)}")
+                # Continuar mesmo com erro nos reels
+            
+            print("⏳ Aguardando 2s antes de capturar posts...")
+            time.sleep(2)
+            
+            # Capturar posts (pular os 3 primeiros) - COM LIMITE PARA EVITAR LOOP
+            print("📸 Capturando posts...")
+            count_medias = 0
+            max_posts_checked = 50  # Limite máximo de posts para verificar
+            
+            try:
+                for i, media in enumerate(profile.get_posts()):
+                    if i >= max_posts_checked:  # Evitar loop infinito
+                        print(f"⚠️ Limite de {max_posts_checked} posts atingido")
+                        break
+                        
+                    count_medias += 1
+                    if count_medias > 3:  # Pular os 3 primeiros
+                        likes_array[media.shortcode] = media.likes
+                        comments_array[media.shortcode] = media.comments
+                        engagement_rate_array[media.shortcode] = round(
+                            (media.likes + media.comments) / source_account_new['followers'] * 100, 2
+                        )
+                    
+                    # Extrair hashtags e menções do caption
+                    if media.caption:
+                        hashtags = self._get_hashtags(media.caption)
+                        for hashtag in hashtags:
+                            hashtags_array[hashtag] = hashtags_array.get(hashtag, 0) + 1
+                        
+                        mentions = self._get_mentions(media.caption)
+                        for mention in mentions:
+                            mentions_array[mention] = mentions_array.get(mention, 0) + 1
+                    
+                    # Limitar a 30 posts para evitar demora excessiva
+                    if count_medias > 30:
+                        print("⚠️ Limite de 30 posts atingido")
+                        break
+                        
+            except Exception as e:
+                print(f"⚠️ Erro ao capturar posts: {str(e)}")
+                # Continuar mesmo com erro nos posts
+            
+            # Calcular estatísticas dos posts
+            details = {}
+            details['total_likes'] = sum(likes_array.values())
+            details['total_comments'] = sum(comments_array.values())
+            details['average_comments'] = details['total_comments'] / len(comments_array) if comments_array else 0
+            details['average_likes'] = details['total_likes'] / len(likes_array) if likes_array else 0
+            source_account_new['average_engagement_rate'] = round(
+                sum(engagement_rate_array.values()) / len(engagement_rate_array), 2
+            ) if engagement_rate_array else 0
+            
+            # Calcular estatísticas dos reels
+            details['reels_total_likes'] = sum(likes_array_reels.values())
+            details['reels_total_comments'] = sum(comments_array_reels.values())
+            details['reels_total_video_views'] = sum(video_views_array_reels.values())
+            details['reels_average_comments'] = details['reels_total_comments'] / len(comments_array_reels) if comments_array_reels else 0
+            details['reels_average_likes'] = details['reels_total_likes'] / len(likes_array_reels) if likes_array_reels else 0
+            details['reels_average_video_views'] = details['reels_total_video_views'] / len(video_views_array_reels) if video_views_array_reels else 0
+            details['reels_average_engagement_rate'] = round(
+                sum(engagement_rate_array_reels.values()) / len(engagement_rate_array_reels), 2
+            ) if engagement_rate_array_reels else 0
+            
+            # Ordenar e pegar top items
+            sorted_engagement = dict(sorted(engagement_rate_array.items(), key=lambda x: x[1], reverse=True))
+            sorted_hashtags = dict(sorted(hashtags_array.items(), key=lambda x: x[1], reverse=True))
+            sorted_mentions = dict(sorted(mentions_array.items(), key=lambda x: x[1], reverse=True))
+            
+            details['top_hashtags'] = dict(list(sorted_hashtags.items())[:15])
+            details['top_mentions'] = dict(list(sorted_mentions.items())[:15])
+            details['top_posts'] = dict(list(sorted_engagement.items())[:4])
+            
+            # Baixar foto de perfil
+            import requests
+            import os
+            try:
+                os.makedirs('assets/tempprofileimg', exist_ok=True)
+                response = requests.get(source_account_new['profile_picture_url'], proxies=self.PROXY_CONFIG)
+                if response.status_code == 200:
+                    filename = f'assets/tempprofileimg/Juicy_{source_account_new["username"]}.jpg'
+                    with open(filename, 'wb') as f:
+                        f.write(response.content)
+                    source_account_new['profile_picture_url'] = f'http://localhost/{filename}'
+                    image_url = source_account_new['profile_picture_url']
+                else:
+                    image_url = source_account_new['profile_picture_url']
+            except Exception as e:
+                print(f"⚠️ Erro ao baixar foto de perfil: {str(e)}")
+                image_url = source_account_new['profile_picture_url']
+            
+            # Cancelar timeout
+            signal.alarm(0)
+            
+            print("✅ Scraper concluído com sucesso!")
+            
+            return {
+                'success': 1,
+                'message': 'dados recebidos com sucesso',
+                'data': {
+                    'instagram': source_account_new,
+                    'details': details,
+                    'image': image_url
+                }
+            }
+            
+        except TimeoutError:
+            print("⏰ Timeout na captura de dados")
+            signal.alarm(0)  # Cancelar timeout
+            return {
+                'success': 0,
+                'message': 'problemas em conseguir os dados',
+                'data': []
+            }
+        except Exception as e:
+            print(f"❌ Erro no scraper: {str(e)}")
+            signal.alarm(0)  # Cancelar timeout
+            return {
+                'success': 0,
+                'message': 'problemas em conseguir os dados',
+                'data': []
+            }
+
+    def _get_hashtags(self, text):
+        """Extrai hashtags do texto"""
+        import re
+        return re.findall(r'#(\w+)', text)
+
+    def _get_mentions(self, text):
+        """Extrai menções do texto"""
+        import re
+        return re.findall(r'@(\w+)', text)
+
+    def scrapper_simples(self, profile_name, login=None, senha=None):
+        """
+        Versão simplificada e mais robusta do scraper
+        Usa apenas Instaloader de forma eficiente, sem loops complexos
+        
+        Args:
+            profile_name (str): Nome do perfil do Instagram
+            login (str): Username para login (opcional)
+            senha (str): Senha para login (opcional)
+        
+        Returns:
+            dict: Dados estruturados igual ao PHP
+        """
+        try:
+            print(f"🔍 Iniciando scraper simples para @{profile_name}...")
+            
+            # Usar credenciais fornecidas ou padrão
+            if login and senha:
+                self.instagram_credentials['username'] = login
+                self.instagram_credentials['password'] = senha
+                print(f"🔐 Usando credenciais fornecidas: {login}")
+            
+            # Fazer login único
+            if not self.ensure_logged_in():
+                return {
+                    'success': 0,
+                    'message': 'problemas em conseguir os dados',
+                    'data': []
+                }
+            
+            # Capturar dados do perfil
+            profile = instaloader.Profile.from_username(self.L.context, profile_name)
+            
+            # Verificações iniciais
+            if profile.followers < 1000:
+                return {
+                    'success': 0,
+                    'message': 'O usuário não tem o mínimo de followers',
+                    'data': []
+                }
+            
+            if profile.is_private:
+                return {
+                    'success': 0,
+                    'message': 'O perfil é privado',
+                    'data': []
+                }
+            
+            # Dados básicos do perfil
+            source_account_new = {
+                'instagram_id': profile.userid,
+                'username': profile.username,
+                'full_name': profile.full_name if profile.full_name else profile.username,
+                'description': profile.biography if profile.biography else '',
+                'website': profile.external_url if profile.external_url else '',
+                'followers': profile.followers,
+                'following': profile.followees,
+                'uploads': profile.mediacount,
+                'profile_picture_url': profile.profile_pic_url,
+                'is_private': 1 if profile.is_private else 0,
+                'is_verified': 1 if profile.is_verified else 0
+            }
+            
+            # Arrays para estatísticas
+            likes_array = {}
+            comments_array = {}
+            engagement_rate_array = {}
+            hashtags_array = {}
+            mentions_array = {}
+            
+            # Arrays para reels
+            likes_array_reels = {}
+            comments_array_reels = {}
+            engagement_rate_array_reels = {}
+            video_views_array_reels = {}
+            
+            print("📊 Capturando dados dos posts...")
+            
+            # Capturar dados dos posts de forma limitada e eficiente
+            posts_processed = 0
+            reels_processed = 0
+            max_posts = 30  # Limite máximo de posts
+            
+            for post in profile.get_posts():
+                if posts_processed >= max_posts:
+                    break
+                
+                posts_processed += 1
+                
+                # Pular os 3 primeiros posts
+                if posts_processed > 3:
+                    likes_array[post.shortcode] = post.likes
+                    comments_array[post.shortcode] = post.comments
+                    engagement_rate_array[post.shortcode] = round(
+                        (post.likes + post.comments) / source_account_new['followers'] * 100, 2
+                    )
+                    
+                    # Extrair hashtags e menções
+                    if post.caption:
+                        hashtags = self._get_hashtags(post.caption)
+                        for hashtag in hashtags:
+                            hashtags_array[hashtag] = hashtags_array.get(hashtag, 0) + 1
+                        
+                        mentions = self._get_mentions(post.caption)
+                        for mention in mentions:
+                            mentions_array[mention] = mentions_array.get(mention, 0) + 1
+                
+                # Verificar se é reel
+                if post.is_video and post.video_duration and post.video_duration <= 90:
+                    reels_processed += 1
+                    if reels_processed > 3:  # Pular os 3 primeiros reels
+                        likes_array_reels[post.shortcode] = post.likes
+                        comments_array_reels[post.shortcode] = post.comments
+                        video_views_array_reels[post.shortcode] = getattr(post, 'video_view_count', 0)
+                        engagement_rate_array_reels[post.shortcode] = round(
+                            (post.likes + post.comments) / source_account_new['followers'] * 100, 2
+                        )
+            
+            print(f"✅ Processados {posts_processed} posts, {reels_processed} reels")
+            
+            # Calcular estatísticas
+            details = {}
+            details['total_likes'] = sum(likes_array.values())
+            details['total_comments'] = sum(comments_array.values())
+            details['average_comments'] = details['total_comments'] / len(comments_array) if comments_array else 0
+            details['average_likes'] = details['total_likes'] / len(likes_array) if likes_array else 0
+            source_account_new['average_engagement_rate'] = round(
+                sum(engagement_rate_array.values()) / len(engagement_rate_array), 2
+            ) if engagement_rate_array else 0
+            
+            # Estatísticas dos reels
+            details['reels_total_likes'] = sum(likes_array_reels.values())
+            details['reels_total_comments'] = sum(comments_array_reels.values())
+            details['reels_total_video_views'] = sum(video_views_array_reels.values())
+            details['reels_average_comments'] = details['reels_total_comments'] / len(comments_array_reels) if comments_array_reels else 0
+            details['reels_average_likes'] = details['reels_total_likes'] / len(likes_array_reels) if likes_array_reels else 0
+            details['reels_average_video_views'] = details['reels_total_video_views'] / len(video_views_array_reels) if video_views_array_reels else 0
+            details['reels_average_engagement_rate'] = round(
+                sum(engagement_rate_array_reels.values()) / len(engagement_rate_array_reels), 2
+            ) if engagement_rate_array_reels else 0
+            
+            # Top items
+            sorted_engagement = dict(sorted(engagement_rate_array.items(), key=lambda x: x[1], reverse=True))
+            sorted_hashtags = dict(sorted(hashtags_array.items(), key=lambda x: x[1], reverse=True))
+            sorted_mentions = dict(sorted(mentions_array.items(), key=lambda x: x[1], reverse=True))
+            
+            details['top_hashtags'] = dict(list(sorted_hashtags.items())[:15])
+            details['top_mentions'] = dict(list(sorted_mentions.items())[:15])
+            details['top_posts'] = dict(list(sorted_engagement.items())[:4])
+            
+            # Baixar foto de perfil
+            import requests
+            import os
+            try:
+                os.makedirs('assets/tempprofileimg', exist_ok=True)
+                response = requests.get(source_account_new['profile_picture_url'], proxies=self.PROXY_CONFIG, timeout=10)
+                if response.status_code == 200:
+                    filename = f'assets/tempprofileimg/Juicy_{source_account_new["username"]}.jpg'
+                    with open(filename, 'wb') as f:
+                        f.write(response.content)
+                    source_account_new['profile_picture_url'] = f'http://localhost/{filename}'
+                    image_url = source_account_new['profile_picture_url']
+                else:
+                    image_url = source_account_new['profile_picture_url']
+            except Exception as e:
+                print(f"⚠️ Erro ao baixar foto de perfil: {str(e)}")
+                image_url = source_account_new['profile_picture_url']
+            
+            print("✅ Scraper simples concluído com sucesso!")
+            
+            return {
+                'success': 1,
+                'message': 'dados recebidos com sucesso',
+                'data': {
+                    'instagram': source_account_new,
+                    'details': details,
+                    'image': image_url
+                }
+            }
+            
+        except Exception as e:
+            print(f"❌ Erro no scraper simples: {str(e)}")
+            return {
+                'success': 0,
+                'message': 'problemas em conseguir os dados',
+                'data': []
+            }
+
+    def quit_session(self):
+        if hasattr(self, 'browser') and self.browser is not None:
+            try:
+                self.browser.quit()
+                print('✅ Browser fechado com sucesso.')
+            except Exception as e:
+                print(f'⚠️ Erro ao fechar browser: {str(e)}')
+        else:
+            print('ℹ️ Browser não foi inicializado ou já foi fechado.')
+        
+        # Resetar status de login
+        self._is_logged_in = False
+        self._login_attempted = False
+        print('🔒 Sessão de login finalizada.')

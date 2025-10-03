@@ -1,0 +1,13 @@
+{
+  "timestamp": "2025-09-09_21-23-38",
+  "error_type": "KeyError",
+  "error_message": "'data'",
+  "context": {
+    "username": "felipeneto"
+  },
+  "proxy_config": {
+    "http": "http://user-juicyspace69-country-br-city-salvador-sessionduration-60:aCQs0w0Qjbj9l9Umex@gate.smartproxy.com:10001",
+    "https": "https://user-juicyspace69-country-br-city-salvador-sessionduration-60:aCQs0w0Qjbj9l9Umex@gate.smartproxy.com:10001"
+  },
+  "consecutive_errors": 0
+}
