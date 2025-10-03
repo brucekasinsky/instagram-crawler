@@ -22,3 +22,4 @@ except Exception as e:
     print(f"❌ Erro: {str(e)}")
     import traceback
     traceback.print_exc()
+

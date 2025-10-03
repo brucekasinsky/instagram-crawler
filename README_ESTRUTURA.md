@@ -115,3 +115,4 @@ export INSTAGRAM_PASSWORD="sua_senha"
 - O sistema de **Spotify** mantém a funcionalidade original
 - Ambos usam a mesma classe `ScraperController` mas com métodos diferentes
 - A pasta `naunha/` contém todos os arquivos principais do projeto
+

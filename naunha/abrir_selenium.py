@@ -57,3 +57,4 @@ def abrir_selenium():
 
 if __name__ == "__main__":
     abrir_selenium()
+

@@ -204,3 +204,4 @@ Para problemas ou dúvidas:
 - **v1.0**: Sistema inicial com automação web
 - **v1.1**: Adicionado suporte a proxy
 - **v1.2**: Melhorada interface e tratamento de erros
+
